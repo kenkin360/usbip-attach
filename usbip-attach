@@ -1,0 +1,98 @@
+#!/bin/bash
+
+GetUsbipTab(){
+	while read -r USBIP_DEVICE USBIP_HOST; do
+			if [ -n "$USBIP_DEVICE" ] && [ -n "$USBIP_HOST" ]; then
+				list="$USBIP_DEVICE $USBIP_HOST
+$list"
+			fi
+	done < <(grep -v -e '^#' -e '^[[:space:]]*$' /etc/usbiptab)
+
+	echo "$list"
+}
+
+DetachAll(){
+	devices="$(GetUsbipTab)"
+
+	while read -r USBIP_DEVICE USBIP_HOST; do
+		port="$(usbip port | grep -B1 $USBIP_DEVICE | grep '<Port in Use>' | sed -E 's/^Port ([0-9][0-9]).*/\1/')"
+
+		if [ ! -n "$port" ]; then
+			continue
+		fi
+
+		usbip detach -p $port
+	done < <(echo "$devices")
+}
+
+AttachAll(){
+	DetachAll
+
+	devices="$(GetUsbipTab)"
+
+	until [ ! -n "$devices" ]; do
+		sleep .3s
+
+		while read -r USBIP_DEVICE USBIP_HOST; do
+			exportable="$(usbip list -r $USBIP_HOST)"
+
+			if [ $? -eq 0 ]; then
+				:
+			else
+				list="$USBIP_DEVICE $USBIP_HOST
+$list"
+				continue
+			fi
+
+			busid="$(echo "$exportable" | grep $USBIP_DEVICE | cut -d: -f1)"
+
+			if [ ! -n "$busid" ]; then
+				list="$USBIP_DEVICE $USBIP_HOST
+$list"
+				echo "usbip-attach: info: device $USBIP_DEVICE is not found on $USBIP_HOST"
+				continue
+			fi
+
+			usbip attach -r $USBIP_HOST -b $busid
+
+			if [ $? -eq 0 ]; then
+				echo "usbip-attach: info: $USBIP_DEVICE on $USBIP_HOST is now attached!"
+			else
+				list="$USBIP_DEVICE $USBIP_HOST
+$list"
+			fi
+		done < <(echo "$devices")
+
+		devices=$(echo "$list"|grep -v -e '^#' -e '^[[:space:]]*$')
+		unset list
+
+		if [ ! "service" == "$1" ]; then
+			return
+		fi
+	done
+
+	while [ "service" == "$1" ]; do
+		:
+	done
+}
+
+modprobe vhci-hcd
+self="$(basename $0)"
+if [ -n "$1" ]; then
+	$@
+else
+	echo "Usage: $self <COMMAND> [options]
+
+Valid commands are: 
+
+  GetUsbipTab            List all devices in /etc/usbiptab
+
+  DetachAll              Detach all devices
+
+  AttachAll              Attach all devices
+
+  AttachAll service      For systemd service section: 
+
+                         ExecStart=$self AttachAll service
+"
+fi

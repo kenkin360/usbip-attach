@@ -1,0 +1,6 @@
+cd "$(dirname $0)"
+cp usbip-attach.service /etc/systemd/system
+systemctl daemon-reload
+cp usbip-attach /usr/sbin
+systemctl enable --now usbip-attach
+systemctl -l --no-pager status usbip-attach

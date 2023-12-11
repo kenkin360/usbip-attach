@@ -1,0 +1,5 @@
+systemctl disable --now usbip-attach
+systemctl -l --no-pager status usbip-attach
+rm /etc/systemd/system/usbip-attach.service
+systemctl daemon-reload
+rm /usr/sbin/usbip-attach
