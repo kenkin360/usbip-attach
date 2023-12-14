@@ -1,3 +1,5 @@
+systemctl disable --now usbip-attach &> /dev/null
+
 cd "$(dirname $0)"
 cp usbip-attach.service /etc/systemd/system
 systemctl daemon-reload
